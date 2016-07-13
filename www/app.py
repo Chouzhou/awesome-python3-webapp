@@ -130,7 +130,7 @@ async def init(loop):
     add_routes(app, 'handler')
     add_static(app)
     app.router.add_route('GET', '/', index)
-    srv = await loop.create_server(app.make_handler(), '127.0.0.1', 7000)
+    srv = await loop.create_server(app.make_handler(), '127.0.0.1', 8000)
     logging.info('server started at http://127.0.0.1:8000...')
     return srv
 
