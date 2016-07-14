@@ -44,6 +44,61 @@ def post(path):
     return decorator
 
 
+# 获取可得的关键词
+def get_required_kw_args(fn):
+    args = []
+    params = inspect.signature(fn).parameters
+    for name, param in params.items():
+        # 判断关键词 默认值
+        if param.kind == inspect.Parameter.KEYWORD_ONLY and param.default == inspect.Parameter.empty:
+            args.append(name)
+    return tuple(args)
+
+
+def get_named_kw_args(fn):
+    args = []
+    params = inspect.signature(fn).parameters
+    for name, param in params.items():
+        if param.kind == inspect.Parameter.KEYWORD_ONLY:
+            args.append(name)
+    return tuple(args)
+
+
+# 判断命名关键词是否正确
+def has_named_kw_args(fn):
+    # args = []
+    params = inspect.signature(fn).parameters
+    for name, param in params.items():
+        if param.kind == inspect.Parameter.KEYWORD_ONLY:
+            # args.append(name)
+            return True
+
+
+# 判断关键词种类
+def has_var_kw_arg(fn):
+    # args = []
+    params = inspect.signature(fn).parameters
+    for name, param in params.items():
+        if param.kind == inspect.Parameter.KEYWORD_ONLY:
+            # args.append(name)
+            return True
+
+
+# 判断是否有请求
+def has_request_arg(fn):
+    sig = inspect.signature(fn)
+    params = sig.parameters
+    found = False
+    for name, param in params.items():
+        if found and (param.kind != inspect.Parameter.KEYWORD_ONLY and
+                              param.kind != inspect.Parameter.VAR_POSITIONAL and
+                              param.kind != inspect.Parameter.VAR_KEYWORD
+                      ):
+            raise ValueError('request paramter must be the last named parameter in function:%s%s') % (
+                fn.__name__, str(sig))
+    return found
+
+
 class RequestHandle(object):
     def __init__(self, app, fn):
         self.app = app
