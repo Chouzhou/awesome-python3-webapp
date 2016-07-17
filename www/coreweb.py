@@ -6,6 +6,9 @@ import asyncio
 import inspect
 import logging
 import os
+from urllib import parse
+
+from aiohttp import web
 
 
 def get(path):
@@ -68,6 +71,7 @@ def get_named_kw_args(fn):
 def has_named_kw_args(fn):
     # args = []
     params = inspect.signature(fn).parameters
+    # print(params)
     for name, param in params.items():
         if param.kind == inspect.Parameter.KEYWORD_ONLY:
             # args.append(name)
@@ -103,13 +107,67 @@ class RequestHandle(object):
     def __init__(self, app, fn):
         self.app = app
         self._func = fn
-        # 还有补充的内容
+        # 补充的内容
+        self._has_var_kw_arg = has_var_kw_arg(fn)
+        self._has_request_arg = has_request_arg(fn)
+        self._has_named_kw_args = has_named_kw_args(fn)
+        self._named_kw_args = get_named_kw_args(fn)
+        self._required_kw_args = get_required_kw_args(fn)
 
     async def __call__(self, request):
         # 还有其他的东西
         kw = None
-        r = await self._func(**kw)
-        return r
+        if self._has_var_kw_arg or self._has_named_kw_args or self._required_kw_args:
+            if request.method == 'POST':
+                if not request.content_type:
+                    # 判断请求类型
+                    return web.HTTPBadRequest('Missting Content-Type')
+                ct = request.content_type.lower()
+                if ct.startswith('appliction/json'):
+                    params = await request.json()
+                    if not isinstance(params, dict):
+                        # 判断类型是不是dict
+                        return web.HTTPBadRequest('JSON body must be object.')
+                    kw = params
+                elif ct.startswith('appliction/x-www-form-urlencoded') or ct.startswith('multipart/form-data'):
+                    params = await request.post()
+                    kw = dict(**params)
+                else:
+                    return web.HTTPBadRequest('Unsupported Content-Type:%s' % request.content_type)
+            if request.method == 'GET':
+                qs = request.query_string
+                if qs:
+                    kw = dict()
+                    for k, v in parse.parse_qs.items():
+                        kw[k] = v[0]
+        if kw is None:
+            kw = dict(**request.match_info)
+        else:
+            if not self._has_var_kw_arg and self._named_kw_args:
+                # 移除所有未命名的KW
+                copy = dict()
+                for name in self._named_kw_args:
+                    if name in kw:
+                        copy[name] = kw[name]
+                kw = copy
+            # 检查命名参数
+            for k, v in request.match_info.items():
+                if k in kw:
+                    logging.warning('Duplicate arg name in named arg and kw args:%s' % k)
+                kw[k] = v
+        if self._has_request_arg:
+            kw['request'] = request
+        # 检查已修改kw
+        if self._required_kw_args:
+            for name in self._required_kw_args:
+                if not name in kw:
+                    return web.HTTPBadRequest('Missing argument:%s' % name)
+        logging.info('call with args:%s' % str(kw))
+        try:
+            r = await self._func(**kw)
+            return r
+        except APIError as e:
+            return dict(error=e.error, data=e.data, message=e.message)
 
 
 # 处理URL函数
