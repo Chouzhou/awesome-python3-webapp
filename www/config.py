@@ -2,6 +2,7 @@
 from www import config_default
 
 
+# 检查配置文件是否为字典
 def merge(defaults, override):
     r = {}
     for k, v in defaults.items():
@@ -49,3 +50,4 @@ try:
     configs = merge(configs, config_override.configs)
 except ImportError:
     pass
+configs = toDict(configs)
